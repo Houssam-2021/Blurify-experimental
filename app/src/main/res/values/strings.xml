@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Blurify</string>
+    <string name="accessibility_description">Blurify uses this to show its glass volume bar, control center, notifications and home dock, and to take a screenshot so it can blur what is behind them.</string>
+</resources>
