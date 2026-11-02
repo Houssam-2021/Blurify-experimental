@@ -44,7 +44,8 @@ class PetalNativeActions(
     private val overlayExit: (() -> Unit)? = null,
     private val overlayFinish: (() -> Unit)? = null,
     private val cameraPermissionRequest: (() -> Unit)? = null,
-    private val overlayNavigateNotifications: (() -> Unit)? = null
+    private val overlayNavigateNotifications: (() -> Unit)? = null,
+    private val overlayReady: (() -> Unit)? = null
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private val cameras = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -76,6 +77,7 @@ class PetalNativeActions(
         overlayRequest?.invoke() ?: toast("Enable Blurify Control Center in Settings")
     }
     @JavascriptInterface fun closeOverlay() = onUi { overlayFinish?.invoke() ?: overlayDismiss?.invoke() }
+    @JavascriptInterface fun pageReady() = onUi { overlayReady?.invoke() }
     @JavascriptInterface fun onPanelClosed() = onUi { overlayExit?.invoke() }
     @JavascriptInterface fun showNotifications() = onUi { overlayNavigateNotifications?.invoke() }
 

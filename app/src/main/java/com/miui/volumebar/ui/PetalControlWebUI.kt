@@ -27,7 +27,8 @@ fun PetalControlWebUI(
     bridge: PetalNativeActions,
     onCreated: (WebView) -> Unit,
     onDisposed: (WebView) -> Unit,
-    onInteract: () -> Unit
+    onInteract: () -> Unit,
+    onSwipeUpExit: () -> Unit = {}
 ) {
     val currentVisibility = remember { arrayOfNulls<Boolean>(1) }
     Box(Modifier.fillMaxSize()) {
@@ -58,14 +59,31 @@ fun PetalControlWebUI(
                             view: WebView, request: WebResourceRequest
                         ): Boolean = true
                         override fun onPageFinished(view: WebView, url: String?) {
-                            if (url == "file:///android_asset/petal/index.html") {
+                            if (url?.endsWith("petal/index.html") == true) {
                                 view.evaluateJavascript("window.configureApp('overlay');", null)
                                 bridge.updateLevels(view)
                             }
                         }
                     }
-                    setOnTouchListener { _, event ->
-                        if (event.actionMasked == MotionEvent.ACTION_DOWN) onInteract()
+                    // Native exit path that never depends on the page's JavaScript: an upward swipe that
+                    // starts in the bottom edge zone (the gesture-navigation area) closes the panel.
+                    var downY = 0f
+                    var fromBottom = false
+                    var exited = false
+                    setOnTouchListener { v, event ->
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                onInteract()
+                                downY = event.y
+                                fromBottom = event.y > v.height * 0.88f
+                                exited = false
+                            }
+                            MotionEvent.ACTION_MOVE -> if (fromBottom && !exited &&
+                                downY - event.y > 72 * v.resources.displayMetrics.density) {
+                                exited = true
+                                onSwipeUpExit()
+                            }
+                        }
                         false
                     }
                     onCreated(this)

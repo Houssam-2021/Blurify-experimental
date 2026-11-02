@@ -91,6 +91,8 @@ class ControlCenterController(private val service: AccessibilityService) {
     private var petalWebView: WebView? = null
     private var petalMode = false
     private var petalClosing = false
+    private var petalReady = false
+    private var fallbackToOriginal = false
     private var opening = false
     private var torchOn = false
 
@@ -127,6 +129,16 @@ class ControlCenterController(private val service: AccessibilityService) {
     }
 
     private val closeIdle = Runnable { dismiss() }
+
+    /** If the HyperOS page never reports ready (blank WebView), drop to Blurify's original panel instead of a dead screen. */
+    private val petalWatchdog = Runnable {
+        if (panelView != null && petalMode && !petalReady && !petalClosing) {
+            val target = page.value
+            fallbackToOriginal = true
+            removePanel()
+            open(target)
+        }
+    }
 
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> syncStrip() }
 
@@ -276,7 +288,9 @@ class ControlCenterController(private val service: AccessibilityService) {
         lifecycle = owner
         petalClosing = false
         // Keep the selected style when switching from Blurify's notifications page.
-        petalMode = getStyle(service) == ControlCenterStyle.HYPEROS
+        petalReady = false
+        petalMode = getStyle(service) == ControlCenterStyle.HYPEROS && !fallbackToOriginal
+        fallbackToOriginal = false
         if (petalMode) {
             petalBridge = PetalNativeActions(
                 context = service,
@@ -287,7 +301,8 @@ class ControlCenterController(private val service: AccessibilityService) {
                     page.value = CcPage.Notifications
                     petalWebView = null
                     resetIdle()
-                }
+                },
+                overlayReady = { petalReady = true }
             )
         }
 
@@ -303,7 +318,8 @@ class ControlCenterController(private val service: AccessibilityService) {
                         bridge = petalBridge!!,
                         onCreated = { petalWebView = it },
                         onDisposed = { if (petalWebView === it) petalWebView = null },
-                        onInteract = { resetIdle() }
+                        onInteract = { resetIdle() },
+                        onSwipeUpExit = { dismiss() }
                     )
                 } else ControlCenterUI(
                     state = uiState.value,
@@ -324,7 +340,8 @@ class ControlCenterController(private val service: AccessibilityService) {
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT
         ).apply {
             // Cover the status bar area too, so the blur runs edge to edge like the real quick panel
@@ -342,6 +359,7 @@ class ControlCenterController(private val service: AccessibilityService) {
             owner.onResume()
             handler.post(refreshTick)
             resetIdle()
+            if (petalMode) handler.postDelayed(petalWatchdog, 2500)
         } catch (e: Exception) {
             e.printStackTrace()
             lifecycle = null
@@ -351,6 +369,7 @@ class ControlCenterController(private val service: AccessibilityService) {
     private fun removePanel() {
         handler.removeCallbacks(refreshTick)
         handler.removeCallbacks(closeIdle)
+        handler.removeCallbacks(petalWatchdog)
         panelView?.let {
             try {
                 lifecycle?.onPause()
